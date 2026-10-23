@@ -5,4 +5,6 @@
     <usb-device vendor-id="14337" product-id="36872" />
     <!-- fastboot (18D1:D00D) -->
     <usb-device vendor-id="6353" product-id="53261" />
+    <!-- any ADB interface -->
+    <usb-device class="255" subclass="66" protocol="1" />
 </resources>

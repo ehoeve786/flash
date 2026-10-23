@@ -55,6 +55,27 @@ class ProtocolTest {
         assertEquals(listOf("reboot-edl", "oem edl"), usb.writes.map { it.text() })
     }
 
+    @Test fun adbAuthenticatesAndOpensService() {
+        fun msg(cmd: Int, a0: Int, data: ByteArray) = arrayOf(le(24).putInt(cmd).putInt(a0).putInt(0).putInt(data.size).putInt(0).putInt(cmd.inv()).array(), data)
+        val token = ByteArray(20) { it.toByte() }
+        val key = java.security.KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.genKeyPair()
+        val usb = FakeLink(*msg(0x48545541, 1, token), *msg(0x48545541, 1, token), *msg(0x4e584e43, 0x01000000, "device::\u0000".toByteArray()))
+        val adb = Adb(usb, key)
+        adb.connect {}
+        adb.service("reboot:edl")
+        // writes: CNXN hdr+data, AUTH(sig) hdr+data, AUTH(pubkey) hdr+data, OPEN hdr+data
+        val sig = usb.writes[3]
+        val prefix = byteArrayOf(0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14)
+        assertTrue(java.security.Signature.getInstance("NONEwithRSA").run { initVerify(key.public); update(prefix + token); verify(sig) })
+        val pub = java.util.Base64.getDecoder().decode(usb.writes[5].text().substringBefore(' '))
+        val b = ByteBuffer.wrap(pub).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(64, b.getInt(0))
+        val n = (key.public as java.security.interfaces.RSAPublicKey).modulus
+        assertEquals(n, java.math.BigInteger(1, pub.copyOfRange(8, 264).reversedArray()))
+        assertEquals(-1, b.getInt(4) * n.toInt()) // n0inv = -1/n mod 2^32
+        assertEquals("reboot:edl\u0000", usb.writes[7].text())
+    }
+
     @Test fun xmlParsing() {
         val r = Firehose.parse(("<?xml version=\"1.0\" encoding=\"UTF-8\" ?><data><log value=\"INFO: {&quot;storage_info&quot;: {&quot;a&quot;: 1}} &amp; x > y\" /></data>" +
             "<?xml version=\"1.0\" ?><data><response value=\"NAK\" rawmode=\"false\" /></data>").toByteArray())

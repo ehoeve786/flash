@@ -1,0 +1,9 @@
+<resources>
+    <!-- Website palette -->
+    <color name="comma_green">#51FF00</color>
+    <color name="state_idle">#9CA3AF</color>
+    <color name="state_wait">#EAB308</color>
+    <color name="state_work">#A3E635</color>
+    <color name="state_done">#22C55E</color>
+    <color name="state_error">#EF4444</color>
+</resources>

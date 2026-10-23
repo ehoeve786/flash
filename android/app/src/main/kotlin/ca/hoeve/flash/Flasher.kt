@@ -14,6 +14,8 @@ import java.net.URL
 class Flasher(
     private val qdl: Qdl,
     private val dir: File,
+    /** Device type picked in the UI (32 = comma 3, 33 = 3X, 34 = four). */
+    private val expectedType: Int,
     private val status: (String, Double) -> Unit,
     private val log: (String) -> Unit,
 ) {
@@ -32,7 +34,8 @@ class Flasher(
         qdl.connect()
         log("Connected ${qdl.serial}")
         val type = qdl.fh.deviceType()
-        val url = MANIFESTS[type] ?: error("Unknown device type $type")
+        check(type == expectedType) { "Selected ${NAMES[expectedType]} but the connected device is ${NAMES[type] ?: "unknown (type $type)"}" }
+        val url = MANIFESTS.getValue(type)
         val images = JSONArray(URL(url).readText()).let { a -> List(a.length()) { Image(a.getJSONObject(it)) } }
         check(images.isNotEmpty()) { "Manifest is empty" }
 
@@ -139,6 +142,7 @@ class Flasher(
             33 to "$BASE/release-tizi/system/hardware/tici/all-partitions.json",
             34 to "$BASE/release-mici/system/hardware/tici/all-partitions.json",
         )
+        private val NAMES = mapOf(32 to "comma 3", 33 to "comma 3X", 34 to "comma four")
         private val SANDISK_128 = Regex("^SDINDDH4-128G(?: +\\d+)?$")
 
         /** Picks the userdata image for the UFS chip (checkCompatibleDevice). */

@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">comma flash</string>
+    <string name="tagline">Erases the device and installs the latest AGNOS + openpilot release.</string>
+    <string name="connect_title">Connect your device</string>
+    <string name="device_title">Your device</string>
+    <string name="comma3">comma 3</string>
+    <string name="comma3x">comma 3X</string>
+    <string name="comma4">comma four</string>
+    <string name="steps_three">1. Unplug the device and wait for the light on the back to turn off.\n2. Connect port 1 to this phone (USB-C OTG adapter recommended).\n3. Connect port 2 to a power brick.\n\nThe screen stays blank in EDL mode; that\'s normal.</string>
+    <string name="steps_four">1. Unplug the device.\n2. Connect port 1 to this phone (USB-C OTG adapter recommended).\n3. Connect port 2 to a power brick.\n\nThe screen stays blank in EDL mode; that\'s normal.</string>
+    <string name="keep_open">Keep this app open until it finishes. Needs Wi-Fi or data and a few GB free.</string>
+    <string name="flash">Flash AGNOS</string>
+    <string name="reboot_edl">Reboot to EDL</string>
+    <string name="reboot_fastboot">Reboot to fastboot</string>
+    <string name="log">Log</string>
+</resources>
