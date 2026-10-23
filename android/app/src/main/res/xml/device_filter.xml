@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Qualcomm EDL (05C6:9008) and comma four (3801:9008) -->
+<resources>
+    <usb-device vendor-id="1478" product-id="36872" />
+    <usb-device vendor-id="14337" product-id="36872" />
+</resources>
