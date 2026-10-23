@@ -72,6 +72,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
                             android:text="@string/comma3" />
 
                         <com.google.android.material.button.MaterialButton
@@ -80,6 +81,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
                             android:text="@string/comma3x" />
 
                         <com.google.android.material.button.MaterialButton
@@ -88,6 +90,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:paddingHorizontal="4dp"
                             android:text="@string/comma4" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
                 </LinearLayout>
@@ -144,30 +147,22 @@
                 android:textAppearance="?attr/textAppearanceTitleMedium"
                 app:icon="@drawable/ic_system_update_c3" />
 
-            <LinearLayout
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/rebootEdl"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp">
+                android:layout_marginTop="8dp"
+                android:text="@string/reboot_edl"
+                app:icon="@drawable/ic_bolt" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rebootEdl"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
-                    android:layout_weight="1"
-                    android:text="@string/reboot_edl"
-                    app:icon="@drawable/ic_bolt" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rebootFastboot"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/reboot_fastboot"
-                    app:icon="@drawable/ic_cable" />
-            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/rebootFastboot"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/reboot_fastboot"
+                app:icon="@drawable/ic_cable" />
 
             <!-- Connection steps -->
             <com.google.android.material.card.MaterialCardView

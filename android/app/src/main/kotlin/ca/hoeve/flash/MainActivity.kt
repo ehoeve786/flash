@@ -139,6 +139,7 @@ class MainActivity : AppCompatActivity(), Session.Ui {
     private fun idle(msg: String? = null) {
         val d = device()
         setBar(0)
+        bar.visibility = View.INVISIBLE
         status.text = msg ?: when {
             d == null -> "Waiting for device (EDL, fastboot or ADB)"
             d.fastboot -> "Device in fastboot mode. Tap Reboot to EDL."
@@ -154,9 +155,9 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         if (bar.isIndeterminate != pm < 0) { // M3 refuses mode switches while visible
             bar.visibility = View.INVISIBLE
             bar.isIndeterminate = pm < 0
-            bar.visibility = View.VISIBLE
         }
         if (pm >= 0) bar.setProgressCompat(pm, true)
+        bar.visibility = View.VISIBLE
     }
 
     /** Website-style status circle; pulses while busy. */
