@@ -66,15 +66,31 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
         return waitForData(retries)
     }
 
+    /** Reads and logs whatever the device has queued (e.g. the loader's startup banner) until it goes quiet. */
+    private fun drain() {
+        val out = ByteArrayOutputStream()
+        while (true) out.write(usb.read(300).takeIf { it.isNotEmpty() } ?: break)
+        parse(out.toByteArray()).logs.forEach { log("device: $it") }
+    }
+
     fun configure() {
-        runCatching {
-            usb.write(xml("configure", "MemoryName" to "UFS", "Verbose" to 0, "AlwaysValidate" to 0,
-                "MaxDigestTableSizeInBytes" to 2048, "MaxPayloadSizeToTargetInBytes" to MAX_PAYLOAD,
-                "ZLPAwareHost" to 1, "SkipStorageInit" to 0, "SkipWrite" to 0), timeout = 1000)
+        val cmd = xml("configure", "MemoryName" to "UFS", "Verbose" to 0, "AlwaysValidate" to 0,
+            "MaxDigestTableSizeInBytes" to 2048, "MaxPayloadSizeToTargetInBytes" to MAX_PAYLOAD,
+            "ZLPAwareHost" to 1, "SkipStorageInit" to 0, "SkipWrite" to 0)
+        // The loader blocks until its startup banner is read and won't accept commands meanwhile.
+        // (qdl.js gets away with an un-awaited write because WebUSB reads concurrently.)
+        var sent = false
+        for (attempt in 1..3) {
+            drain()
+            sent = runCatching { usb.write(cmd, timeout = 2000) }.isSuccess
+            if (sent) break
+            log("debug: configure not accepted yet (attempt $attempt/3)")
         }
+        check(sent) { "Firehose configure: device is not accepting commands" }
         var r = waitForData()
-        if ("MemoryName" !in r.rsp) r = waitForData()
-        check(r.ack) { "Firehose configure: negative response" }
+        if ("MemoryName" !in r.rsp) r = waitForData().let { Reply(r.rsp + it.rsp, r.logs + it.logs) }
+        check(r.rsp.isNotEmpty()) { "Firehose configure: no response from device" }
+        check(r.ack) { "Firehose configure: negative response ${r.rsp}" }
         check(r.logs.any { "Calling handler for configure" in it }) { "Failed to configure: handler not called" }
         check(r.logs.any { "Storage type set to value UFS" in it }) { "Failed to configure: storage type not set" }
     }
