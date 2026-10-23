@@ -28,7 +28,14 @@ class Images(base: File, val type: Int, private val status: (String, Double) -> 
     private fun parse(text: String) = JSONArray(text).let { a -> List(a.length()) { Image(a.getJSONObject(it)) } }
         .also { check(it.isNotEmpty()) { "Manifest is empty" } }
 
-    private fun fetch() = URL(MANIFESTS.getValue(type)).readText()
+    /** all-partitions.json with entries replaced by same-named ones from agnos.json (as flash.comma.ai does). */
+    private fun fetch(): String {
+        val url = MANIFESTS.getValue(type)
+        val all = JSONArray(URL(url).readText())
+        val agnos = JSONArray(URL(url.replace("all-partitions", "agnos")).readText())
+        val byName = List(agnos.length(), agnos::getJSONObject).associateBy { it.getString("name") }
+        return JSONArray(List(all.length(), all::getJSONObject).map { byName[it.getString("name")] ?: it }).toString()
+    }
 
     fun file(im: Image) = File(dir, "${im.name}-${im.hash}.img")
 
@@ -129,10 +136,11 @@ class Images(base: File, val type: Int, private val status: (String, Double) -> 
 
     companion object {
         private const val BASE = "https://raw.githubusercontent.com/commaai/openpilot"
+        // Same as upstream flash.comma.ai src/config.js
         private val MANIFESTS = mapOf(
             32 to "$BASE/release-tici/system/hardware/tici/all-partitions.json",
-            33 to "$BASE/release-tizi/system/hardware/tici/all-partitions.json",
-            34 to "$BASE/release-mici/system/hardware/tici/all-partitions.json",
+            33 to "$BASE/release-tizi/openpilot/common/hardware/comma/all-partitions.json",
+            34 to "$BASE/release-mici/openpilot/common/hardware/comma/all-partitions.json",
         )
         val NAMES = mapOf(32 to "comma 3", 33 to "comma 3X", 34 to "comma four")
 
