@@ -19,6 +19,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
@@ -61,6 +62,12 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         statusIcon = findViewById<ImageView>(R.id.statusIcon).apply { background = background.mutate() }
         logView = findViewById(R.id.log)
         logScroll = findViewById(R.id.logScroll)
+        // Bottom tabs: menu item ids match the tab container ids.
+        val tabs = listOf(R.id.tabDevice, R.id.tabFlash, R.id.tabLog).map { findViewById<View>(it) }
+        findViewById<BottomNavigationView>(R.id.nav).setOnItemSelectedListener { item ->
+            tabs.forEach { it.visibility = if (it.id == item.itemId) View.VISIBLE else View.GONE }
+            true
+        }
         val devices = findViewById<MaterialButtonToggleGroup>(R.id.devices)
         controls = listOf<Pair<Int, (UsbDevice) -> Unit>>(
             R.id.flash to ::flash, R.id.rebootEdl to { reboot(it, true) }, R.id.rebootFastboot to { reboot(it, false) },

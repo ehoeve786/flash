@@ -8,10 +8,12 @@
     <string name="comma4">comma four</string>
     <string name="steps_three">1. Unplug the device and wait for the light on the back to turn off.\n2. Connect port 1 to this phone (USB-C OTG adapter recommended).\n3. Connect port 2 to a power brick.\n\nThe screen stays blank in EDL mode; that\'s normal.</string>
     <string name="steps_four">1. Unplug the device.\n2. Connect port 1 to this phone (USB-C OTG adapter recommended).\n3. Connect port 2 to a power brick.\n\nThe screen stays blank in EDL mode; that\'s normal.</string>
-    <string name="keep_open">Keep this app open until it finishes. Needs Wi-Fi or data and a few GB free.</string>
+    <string name="keep_open">Flashing keeps running in the background. Needs Wi-Fi or data and a few GB free.</string>
     <string name="flash">Flash AGNOS</string>
     <string name="reboot_edl">Reboot to EDL</string>
     <string name="reboot_fastboot">Reboot to fastboot</string>
     <string name="log">Log</string>
     <string name="verbose">Verbose</string>
+    <string name="tab_device">Device</string>
+    <string name="tab_flash">Flash</string>
 </resources>

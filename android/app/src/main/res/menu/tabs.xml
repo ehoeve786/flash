@@ -1,0 +1,5 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/tabDevice" android:icon="@drawable/ic_cable" android:title="@string/tab_device" />
+    <item android:id="@+id/tabFlash" android:icon="@drawable/ic_system_update_c3" android:title="@string/tab_flash" />
+    <item android:id="@+id/tabLog" android:icon="@drawable/ic_log" android:title="@string/log" />
+</menu>
