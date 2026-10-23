@@ -2,9 +2,6 @@ package ca.hoeve.flash
 
 import android.content.Context
 import android.content.Intent
-import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbInterface
-import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -43,7 +40,8 @@ object Session {
     private val main = Handler(Looper.getMainLooper())
     private var notified = 0
 
-    fun run(ctx: Context, d: UsbDevice, intf: UsbInterface, job: (Link) -> Unit) {
+    /** Runs [job] on a worker thread under the foreground service. Main thread only. */
+    fun run(ctx: Context, job: () -> Unit) {
         val app = ctx.applicationContext
         running = true
         status = ""
@@ -51,16 +49,13 @@ object Session {
         ui?.onLog()
         app.startForegroundService(Intent(app, FlashService::class.java))
         thread {
-            val conn = app.getSystemService(UsbManager::class.java).openDevice(d)
             try {
-                checkNotNull(conn) { "Could not open USB device" }
-                job(UsbLink(conn, intf))
+                job()
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed", e)
                 log("ERROR: ${e.message ?: e}")
                 progress("Failed: ${e.message ?: e}", 0.0)
             } finally {
-                conn?.close()
                 running = false
                 main.post { ui?.onProgress(); stopper?.invoke() }
             }

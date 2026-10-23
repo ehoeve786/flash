@@ -72,6 +72,9 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         controls = listOf<Pair<Int, (UsbDevice) -> Unit>>(
             R.id.flash to ::flash, R.id.rebootEdl to { reboot(it, true) }, R.id.rebootFastboot to { reboot(it, false) },
         ).map { (id, a) -> findViewById<View>(id).apply { setOnClickListener { start(a) } } } +
+            listOf<Pair<Int, () -> Unit>>(
+                R.id.agnosDownload to ::agnosDownload, R.id.agnosCheck to ::agnosCheck, R.id.agnosDelete to ::agnosDelete,
+            ).map { (id, a) -> findViewById<View>(id).apply { setOnClickListener { a() } } } +
             List(devices.childCount) { devices.getChildAt(it) }
         devices.addOnButtonCheckedListener { _, id, checked -> if (checked) select(Model.entries.first { it.btn == id }) }
         devices.check((Model.entries.getOrNull(prefs.getInt(PREF_MODEL, Model.C3X.ordinal)) ?: Model.C3X).btn)
@@ -123,6 +126,7 @@ class MainActivity : AppCompatActivity(), Session.Ui {
     override fun onProgress() {
         val busy = Session.running
         controls.forEach { it.isEnabled = !busy }
+        if (!busy) agnosInfo()
         val s = Session.status
         if (s.isEmpty()) return
         val pm = Session.permille
@@ -132,7 +136,8 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         shown = s
         when {
             s.startsWith("Failed") -> state(R.drawable.ic_device_exclamation_c3, R.color.state_error, false)
-            s.startsWith("Done") || s.startsWith("Reboot sent") -> state(R.drawable.ic_done, R.color.state_done, false)
+            s.startsWith("Done") || s.startsWith("Reboot sent") || s.startsWith("AGNOS") -> state(R.drawable.ic_done, R.color.state_done, false)
+            s.startsWith("Update available") -> state(R.drawable.ic_system_update_c3, R.color.state_wait, false)
             s.startsWith("Connecting") || s.startsWith("Rebooting") -> state(R.drawable.ic_cable, R.color.state_wait, busy)
             else -> state(R.drawable.ic_system_update_c3, R.color.state_work, busy)
         }
@@ -144,6 +149,37 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         findViewById<ImageView>(R.id.product).setImageResource(m.product)
         findViewById<ImageView>(R.id.ports).setImageResource(m.ports)
         findViewById<TextView>(R.id.steps).setText(m.steps)
+        agnosInfo()
+    }
+
+    private fun store(m: Model = model) = Images(noBackupFilesDir, m.type, Session::progress, Session::log)
+
+    private fun agnosInfo() {
+        findViewById<TextView>(R.id.agnosInfo).text = "${Images.NAMES[model.type]}: ${store().summary()}"
+    }
+
+    private fun agnosDownload() {
+        if (Session.running) return
+        val s = store()
+        shown = null
+        Session.run(this) { s.downloadAll(); Session.progress("AGNOS ready for ${Images.NAMES[s.type]} (${Images.gb(s.bytes())})", 1.0) }
+    }
+
+    private fun agnosCheck() {
+        if (Session.running) return
+        val s = store()
+        shown = null
+        Session.run(this) {
+            Session.progress("Checking for AGNOS updates", -1.0)
+            val n = s.missing()
+            Session.progress(if (n == 0) "AGNOS is up to date" else "Update available: $n image(s) to download. Tap Download.", 1.0)
+        }
+    }
+
+    private fun agnosDelete() {
+        if (Session.running) return
+        val s = store()
+        confirm("Delete the downloaded AGNOS for ${Images.NAMES[s.type]} (${Images.gb(s.bytes())})?") { s.clear(); agnosInfo() }
     }
 
     private val UsbDevice.fastboot get() = vendorId == 0x18D1 && productId == 0xD00D
@@ -210,17 +246,23 @@ class MainActivity : AppCompatActivity(), Session.Ui {
 
     private fun launch(d: UsbDevice, job: (Link) -> Unit) {
         shown = null
-        Session.run(this, d, d.adb ?: d.getInterface(0), job)
+        val intf = d.adb ?: d.getInterface(0)
+        val um = usb
+        Session.run(this) {
+            val conn = checkNotNull(um.openDevice(d)) { "Could not open USB device" }
+            try { job(UsbLink(conn, intf)) } finally { conn.close() }
+        }
     }
 
     private fun flash(d: UsbDevice) {
         if (!d.edl) return idle("Device is not in EDL mode. Tap Reboot to EDL first.")
         val m = model
         val app = applicationContext
+        val s = store(m)
         confirm("Erase and reflash this ${findViewById<TextView>(m.btn).text}? Everything except the persist partition is erased.") {
             launch(d) {
                 val programmer = app.assets.open("programmer.bin").use { s -> s.readBytes() }
-                Flasher(Qdl(it, programmer, Session::log), app.noBackupFilesDir, m.type, Session::progress, Session::log).run()
+                Flasher(Qdl(it, programmer, Session::log), s, Session::progress, Session::log).run()
             }
         }
     }

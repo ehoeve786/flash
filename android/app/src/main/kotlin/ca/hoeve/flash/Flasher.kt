@@ -1,43 +1,23 @@
 package ca.hoeve.flash
 
-import org.json.JSONArray
 import org.json.JSONObject
-import org.tukaani.xz.XZInputStream
-import java.io.File
-import java.io.IOException
-import java.io.InputStream
 import java.io.RandomAccessFile
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** Full flash sequence (port of flash.comma.ai FlashManager). [status] progress is 0..1, or -1 for indeterminate. */
 class Flasher(
     private val qdl: Qdl,
-    private val dir: File,
-    /** Device type picked in the UI (32 = comma 3, 33 = 3X, 34 = four). */
-    private val expectedType: Int,
+    /** AGNOS store for the device type picked in the UI. */
+    private val store: Images,
     private val status: (String, Double) -> Unit,
     private val log: (String) -> Unit,
 ) {
-    private class Image(j: JSONObject) {
-        val name: String = j.getString("name")
-        val size = j.getLong("size")
-        val hasAB = j.getBoolean("has_ab")
-        val gptLun = j.optJSONObject("gpt")?.getInt("lun")
-        val url: String = j.getString("url")
-    }
-
     fun run() {
-        dir.listFiles()?.forEach(File::delete)
-
         status("Connecting", -1.0)
         qdl.connect()
         log("Connected ${qdl.serial}")
         val type = qdl.fh.deviceType()
-        check(type == expectedType) { "Selected ${NAMES[expectedType]} but the connected device is ${NAMES[type] ?: "unknown (type $type)"}" }
-        val url = MANIFESTS.getValue(type)
-        val images = JSONArray(URL(url).readText()).let { a -> List(a.length()) { Image(a.getJSONObject(it)) } }
-        check(images.isNotEmpty()) { "Manifest is empty" }
+        check(type == store.type) { "Selected ${Images.NAMES[store.type]} but the connected device is ${Images.NAMES[type] ?: "unknown (type $type)"}" }
+        val images = store.manifest()
 
         val info = JSONObject(qdl.fh.storageInfo()).getJSONObject("storage_info")
         val userdata = userdataImage(info)
@@ -47,9 +27,7 @@ class Flasher(
         val gpts = images.filter { it.gptLun != null }
         check(gpts.isNotEmpty()) { "No GPT images found" }
         for (im in gpts) {
-            val f = download(im)
-            RandomAccessFile(f, "r").channel.use { qdl.repairGpt(im.gptLun!!, FileSrc(it, 0, it.size())) }
-            f.delete()
+            RandomAccessFile(store.ensure(im), "r").channel.use { qdl.repairGpt(im.gptLun!!, FileSrc(it, 0, it.size())) }
         }
 
         // Erase everything except mbr, gpt and persist
@@ -62,7 +40,7 @@ class Flasher(
         val sys = images.filter { it.gptLun == null && it.name != "persist" && (!it.name.startsWith("userdata_") || it.name == userdata) }
         check(sys.any { it.name == userdata }) { "Did not find userdata image \"$userdata\"" }
         for (im in sys) {
-            val f = download(im)
+            val f = store.ensure(im)
             val part = if (im.name.startsWith("userdata_")) "userdata" else im.name
             for (slot in if (im.hasAB) listOf("_a", "_b") else listOf("")) {
                 val label = "Flashing $part$slot"
@@ -70,7 +48,6 @@ class Flasher(
                 qdl.flash(part + slot, f) { status(label, it.toDouble() / im.size) }
                 log("Flashed $part$slot")
             }
-            f.delete()
         }
 
         status("Finalizing", -1.0)
@@ -80,71 +57,7 @@ class Flasher(
         status("Done — the device will reboot into setup", 1.0)
     }
 
-    private fun download(im: Image): File {
-        val f = File(dir, "${im.name}.img")
-        val label = "Downloading ${im.name}"
-        status(label, 0.0)
-        log("debug: GET ${im.url}")
-        val http = HttpIn(im.url, log) { status(label, it) }
-        (if (im.url.endsWith(".xz")) XZInputStream(http.buffered(1 shl 16)) else http).use { inp ->
-            f.outputStream().use { inp.copyTo(it, 1 shl 20) }
-        }
-        return f
-    }
-
-    /** Resumes with HTTP Range requests on network errors (like stream.js). */
-    private class HttpIn(private val url: String, private val log: (String) -> Unit, private val onProgress: (Double) -> Unit) : InputStream() {
-        private var pos = 0L
-        private var total = -1L
-        private var s: InputStream? = null
-
-        private fun open(): InputStream {
-            val c = URL(url).openConnection() as HttpURLConnection
-            c.connectTimeout = 15000
-            c.readTimeout = 30000
-            if (pos > 0) c.setRequestProperty("Range", "bytes=$pos-")
-            val code = c.responseCode
-            if (code != 200 && code != 206 || pos > 0 && code != 206) throw IOException("HTTP $code for $url")
-            if (total < 0) total = c.contentLengthLong
-            return c.inputStream.also { s = it }
-        }
-
-        override fun read(): Int {
-            val b = ByteArray(1)
-            return if (read(b, 0, 1) < 0) -1 else b[0].toInt() and 0xFF
-        }
-
-        override fun read(b: ByteArray, off: Int, len: Int): Int {
-            var attempt = 0
-            while (true) {
-                try {
-                    val n = (s ?: open()).read(b, off, len)
-                    if (n > 0) {
-                        pos += n
-                        if (total > 0) onProgress(pos.toDouble() / total)
-                    }
-                    return n
-                } catch (e: IOException) {
-                    runCatching { s?.close() }
-                    s = null
-                    if (++attempt > 3) throw e
-                    log("debug: download error at byte $pos (${e.message}), retry $attempt/3")
-                    Thread.sleep(1000L * attempt)
-                }
-            }
-        }
-
-        override fun close() { s?.close() }
-    }
-
     companion object {
-        private const val BASE = "https://raw.githubusercontent.com/commaai/openpilot"
-        private val MANIFESTS = mapOf(
-            32 to "$BASE/release-tici/system/hardware/tici/all-partitions.json",
-            33 to "$BASE/release-tizi/system/hardware/tici/all-partitions.json",
-            34 to "$BASE/release-mici/system/hardware/tici/all-partitions.json",
-        )
-        private val NAMES = mapOf(32 to "comma 3", 33 to "comma 3X", 34 to "comma four")
         private val SANDISK_128 = Regex("^SDINDDH4-128G(?: +\\d+)?$")
 
         /** Picks the userdata image for the UFS chip (checkCompatibleDevice). */
