@@ -23,7 +23,22 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.14.3
+      # Same signing key every build so new APKs install over old ones:
+      # SIGNING_KEY secret (base64 .jks) if set, else a debug key kept in the Actions cache.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore
+      - name: Signing key from secrets
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        if: env.SIGNING_KEY != ''
+        run: |
+          echo "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "SIGNING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
       - run: gradle --no-daemon testDebugUnitTest assembleDebug
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
       - name: Publish APK
         env:
           GH_TOKEN: ${{ github.token }}
@@ -31,4 +46,4 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk comma-flash.apk
           gh release delete android-latest -y --cleanup-tag || true
           gh release create android-latest comma-flash.apk --prerelease --target "$GITHUB_SHA" \
-            --title "comma flash (Android) ${GITHUB_REF_NAME}@${GITHUB_SHA::7}" --notes "Debug build of android/ from ${GITHUB_SHA}"
+            --title "comma flash (Android) v0.1.${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME}@${GITHUB_SHA::7})" --notes "Debug build of android/ from ${GITHUB_SHA}"
