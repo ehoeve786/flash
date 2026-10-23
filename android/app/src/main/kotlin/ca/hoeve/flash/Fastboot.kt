@@ -14,7 +14,7 @@ object Fastboot {
 
     /** Tries the EDL reboot commands bootloaders commonly implement. */
     fun rebootEdl(usb: Link, log: (String) -> Unit) = check(EDL.any { c ->
-        runCatching { command(usb, c) }.getOrDefault(true).also { log("fastboot $c: ${if (it) "OK" else "FAIL"}") }
+        runCatching { command(usb, c) }.getOrDefault(false).also { log("fastboot $c: ${if (it) "OK" else "FAIL"}") }
     }) { "Bootloader refused all EDL reboot commands" }
 
     private val EDL = listOf("reboot-edl", "oem edl", "oem reboot-edl")

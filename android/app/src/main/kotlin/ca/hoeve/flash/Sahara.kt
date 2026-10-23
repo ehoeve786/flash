@@ -53,7 +53,8 @@ class Sahara(private val usb: Link, private val programmer: ByteArray) {
         check(response()?.u32(0) == CMD_READY) { "Sahara - Failed to enter command mode" }
         serial = "0x%08x".format(exec(SERIAL_NUM_READ).u32(0))
         usb.write(pack(SWITCH_MODE, 0xC, MODE_COMMAND))
-        connect()
+        // Wait for the fresh hello. qdl.js re-runs connect() here, which can send an XML nop into Sahara if the hello is slow.
+        usb.readFully(48, 5000)
         hello(MODE_IMAGE_TX_PENDING)
         while (true) {
             val r = response() ?: error("Sahara - Timeout while uploading loader. Wrong loader?")

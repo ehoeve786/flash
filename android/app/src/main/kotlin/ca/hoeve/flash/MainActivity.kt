@@ -18,6 +18,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlin.concurrent.thread
 
@@ -101,7 +102,7 @@ class MainActivity : AppCompatActivity() {
     /** Shows the waiting/ready state for whatever is plugged in. */
     private fun idle(msg: String? = null) {
         val d = device()
-        bar.setProgressCompat(0, false)
+        setBar(0)
         status.text = msg ?: when {
             d == null -> "Waiting for device (EDL, fastboot or ADB)"
             d.fastboot -> "Device in fastboot mode. Tap Reboot to EDL."
@@ -110,6 +111,16 @@ class MainActivity : AppCompatActivity() {
         }
         if (d == null) state(R.drawable.ic_device_question_c3, R.color.state_idle, false)
         else state(R.drawable.ic_bolt, R.color.state_work, false)
+    }
+
+    /** [pm] 0..1000, or negative for indeterminate. */
+    private fun setBar(pm: Int) {
+        if (bar.isIndeterminate != pm < 0) { // M3 refuses mode switches while visible
+            bar.visibility = View.INVISIBLE
+            bar.isIndeterminate = pm < 0
+            bar.visibility = View.VISIBLE
+        }
+        if (pm >= 0) bar.setProgressCompat(pm, true)
     }
 
     /** Website-style status circle; pulses while busy. */
@@ -136,13 +147,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun flash(d: UsbDevice) =
-        if (!d.edl) idle("Device is not in EDL mode. Tap Reboot to EDL first.")
-        else work(d) { Flasher(Qdl(it, programmer, ::log), noBackupFilesDir, model.type, ::progress, ::log).run() }
+    private fun confirm(msg: String, go: () -> Unit) {
+        MaterialAlertDialogBuilder(this).setMessage(msg).setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ -> go() }.show()
+    }
+
+    private fun flash(d: UsbDevice) {
+        if (!d.edl) return idle("Device is not in EDL mode. Tap Reboot to EDL first.")
+        val m = model
+        confirm("Erase and reflash this ${findViewById<TextView>(m.btn).text}? Everything except the persist partition is erased.") {
+            work(d) { Flasher(Qdl(it, programmer, ::log), noBackupFilesDir, m.type, ::progress, ::log).run() }
+        }
+    }
 
     private fun reboot(d: UsbDevice, edl: Boolean) {
         val target = if (edl) "EDL" else "fastboot"
         if (d.edl && !edl) return idle("Fastboot can't be reached from EDL. Replug: power on port 1, then port 2 to the phone.")
+        // ADB matches any Android device, so make sure it's the comma and not e.g. another phone.
+        if (d.adb != null) confirm("Reboot \"${listOfNotNull(d.manufacturerName, d.productName).joinToString(" ")}\" into $target over ADB?") { rebootNow(d, edl, target) }
+        else rebootNow(d, edl, target)
+    }
+
+    private fun rebootNow(d: UsbDevice, edl: Boolean, target: String) {
         work(d) {
             progress("Rebooting to $target", -1.0)
             when {
@@ -167,7 +193,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed", e)
                 log("ERROR: ${e.message ?: e}")
-                progress("Failed: ${e.message ?: e}", -1.0)
+                progress("Failed: ${e.message ?: e}", 0.0)
             } finally {
                 conn?.close()
                 runOnUiThread { running = false; controls.forEach { it.isEnabled = true } }
@@ -183,13 +209,8 @@ class MainActivity : AppCompatActivity() {
         lastStatus = s
         lastPermille = pm
         runOnUiThread {
-            if (bar.isIndeterminate != pm < 0) { // M3 refuses mode switches while visible
-                bar.visibility = View.INVISIBLE
-                bar.isIndeterminate = pm < 0
-                bar.visibility = View.VISIBLE
-            }
-            if (pm >= 0) bar.setProgressCompat(pm, true)
-            status.text = if (pm >= 0 && pm < 1000) "$s… ${pm / 10}%" else s
+            setBar(pm)
+            status.text = if (pm in 1..999) "$s… ${pm / 10}%" else s
             if (changed) when {
                 s.startsWith("Failed") -> state(R.drawable.ic_device_exclamation_c3, R.color.state_error, false)
                 s.startsWith("Done") || s.startsWith("Reboot sent") -> state(R.drawable.ic_done, R.color.state_done, false)

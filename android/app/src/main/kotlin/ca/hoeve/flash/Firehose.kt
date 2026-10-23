@@ -94,7 +94,8 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
         val total = src.size
         val r0 = send(xml("program", "SECTOR_SIZE_IN_BYTES" to SECTOR, "num_partition_sectors" to (total + SECTOR - 1) / SECTOR,
             "physical_partition_number" to lun, "start_sector" to start))
-        if (!r0.ok) return false
+        // Stricter than qdl.js (which only rejects NAK+rawmode=false): never stream data the device did not ACK.
+        if (!r0.ack) return false.also { log("Program LUN $lun sector $start refused: ${r0.rsp}") }
         var off = 0L
         var i = 0
         while (off < total) {
