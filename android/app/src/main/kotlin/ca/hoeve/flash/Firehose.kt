@@ -123,8 +123,9 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
 
     fun fixGpt(lun: Int, grow: Int) = check(send(xml("fixgpt", "lun" to lun, "grow_last_partition" to grow)).ok) { "Failed to fix gpt" }
 
-    fun reset() {
-        check(send(xml("power", "value" to "reset")).ok) { "Reset failed" }
+    /** [mode]: "reset", "reset_to_edl" or "off". */
+    fun reset(mode: String = "reset") {
+        check(send(xml("power", "value" to mode)).ok) { "Power $mode failed" }
         runCatching { waitForData() }
     }
 

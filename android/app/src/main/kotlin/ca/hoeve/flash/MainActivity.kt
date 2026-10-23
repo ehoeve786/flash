@@ -24,6 +24,7 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
     private val usb by lazy { getSystemService(UsbManager::class.java) }
     private lateinit var btn: Button
+    private lateinit var rebootBtn: Button
     private lateinit var bar: ProgressBar
     private lateinit var status: TextView
     private lateinit var logView: TextView
@@ -32,9 +33,13 @@ class MainActivity : Activity() {
     private var lastStatus = ""
     private var lastPermille = Int.MIN_VALUE
 
+    private var pending: ((UsbDevice) -> Unit)? = null
+    private val programmer by lazy { assets.open("programmer.bin").use { it.readBytes() } }
+
     private val permReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            if (i.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) start() else setStatus("USB permission denied")
+            val a = pending.also { pending = null }
+            if (i.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && a != null) start(a) else setStatus("USB permission denied")
         }
     }
 
@@ -42,7 +47,8 @@ class MainActivity : Activity() {
         super.onCreate(state)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val pad = (16 * resources.displayMetrics.density).toInt()
-        btn = Button(this).apply { text = "Flash"; setOnClickListener { start() } }
+        btn = Button(this).apply { text = "Flash"; setOnClickListener { start(::flash) } }
+        rebootBtn = Button(this).apply { text = "Reboot to EDL"; setOnClickListener { start(::rebootEdl) } }
         bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000 }
         status = TextView(this).apply { textSize = 18f }
         logView = TextView(this).apply { typeface = Typeface.MONOSPACE; textSize = 11f; setTextIsSelectable(true) }
@@ -52,6 +58,7 @@ class MainActivity : Activity() {
             setPadding(pad, pad, pad, pad)
             addView(TextView(context).apply { text = HELP })
             addView(btn)
+            addView(rebootBtn)
             addView(bar)
             addView(status)
             addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -62,7 +69,10 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (!running) setStatus(if (device() != null) "Device in EDL mode detected. Tap Flash." else "Waiting for device in EDL mode")
+        if (!running) setStatus(when (val d = device()) {
+            null -> "Waiting for device in EDL or fastboot mode"
+            else -> if (d.fastboot) "Device in fastboot mode. Tap Reboot to EDL." else "Device in EDL mode. Tap Flash."
+        })
     }
 
     override fun onDestroy() {
@@ -70,34 +80,49 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    private val UsbDevice.fastboot get() = vendorId == 0x18D1 && productId == 0xD00D
+
     private fun device(): UsbDevice? = usb.deviceList.values.firstOrNull {
-        it.productId == 0x9008 && (it.vendorId == 0x05C6 || it.vendorId == 0x3801)
+        it.fastboot || it.productId == 0x9008 && (it.vendorId == 0x05C6 || it.vendorId == 0x3801)
     }
 
-    private fun start() {
+    private fun start(action: (UsbDevice) -> Unit) {
         if (running) return
-        val d = device() ?: return setStatus("No device in EDL mode found. Follow the steps above.")
-        if (usb.hasPermission(d)) flash(d)
-        else usb.requestPermission(d, PendingIntent.getBroadcast(this, 0, Intent(ACTION_PERM).setPackage(packageName), PendingIntent.FLAG_MUTABLE))
+        val d = device() ?: return setStatus("No device in EDL or fastboot mode found. Follow the steps above.")
+        if (usb.hasPermission(d)) action(d)
+        else {
+            pending = action
+            usb.requestPermission(d, PendingIntent.getBroadcast(this, 0, Intent(ACTION_PERM).setPackage(packageName), PendingIntent.FLAG_MUTABLE))
+        }
     }
 
-    private fun flash(d: UsbDevice) {
+    private fun flash(d: UsbDevice) =
+        if (d.fastboot) setStatus("Device is in fastboot mode. Tap Reboot to EDL first.")
+        else work(d) { Flasher(Qdl(it, programmer, ::log), noBackupFilesDir, ::progress, ::log).run() }
+
+    private fun rebootEdl(d: UsbDevice) = work(d) {
+        progress("Rebooting to EDL", -1.0)
+        if (d.fastboot) Fastboot.rebootEdl(it, ::log) else Qdl(it, programmer, ::log).apply { connect() }.fh.reset("reset_to_edl")
+        progress("Reboot sent. Wait for the device to reconnect in EDL mode", 1.0)
+    }
+
+    private fun work(d: UsbDevice, job: (Link) -> Unit) {
         running = true
         btn.isEnabled = false
+        rebootBtn.isEnabled = false
         logView.text = ""
         thread {
             val conn = usb.openDevice(d)
             try {
                 checkNotNull(conn) { "Could not open USB device" }
-                val programmer = assets.open("programmer.bin").use { it.readBytes() }
-                Flasher(Qdl(UsbLink(conn, d.getInterface(0)), programmer, ::log), noBackupFilesDir, ::progress, ::log).run()
+                job(UsbLink(conn, d.getInterface(0)))
             } catch (e: Throwable) {
-                Log.e(TAG, "Flash failed", e)
+                Log.e(TAG, "Failed", e)
                 log("ERROR: ${e.message ?: e}")
                 progress("Failed: ${e.message ?: e}", -1.0)
             } finally {
                 conn?.close()
-                runOnUiThread { running = false; btn.isEnabled = true }
+                runOnUiThread { running = false; btn.isEnabled = true; rebootBtn.isEnabled = true }
             }
         }
     }

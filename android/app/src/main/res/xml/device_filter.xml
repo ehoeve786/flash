@@ -3,4 +3,6 @@
 <resources>
     <usb-device vendor-id="1478" product-id="36872" />
     <usb-device vendor-id="14337" product-id="36872" />
+    <!-- fastboot (18D1:D00D) -->
+    <usb-device vendor-id="6353" product-id="53261" />
 </resources>

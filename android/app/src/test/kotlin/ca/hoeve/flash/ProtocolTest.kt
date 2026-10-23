@@ -49,6 +49,12 @@ class ProtocolTest {
         assertEquals(5000L, progress.last())
     }
 
+    @Test fun fastbootFallsBackThroughEdlCommands() {
+        val usb = FakeLink("FAILunknown command".toByteArray(), "INFOrebooting".toByteArray(), "OKAY".toByteArray())
+        Fastboot.rebootEdl(usb) {}
+        assertEquals(listOf("reboot-edl", "oem edl"), usb.writes.map { it.text() })
+    }
+
     @Test fun xmlParsing() {
         val r = Firehose.parse(("<?xml version=\"1.0\" encoding=\"UTF-8\" ?><data><log value=\"INFO: {&quot;storage_info&quot;: {&quot;a&quot;: 1}} &amp; x > y\" /></data>" +
             "<?xml version=\"1.0\" ?><data><response value=\"NAK\" rawmode=\"false\" /></data>").toByteArray())
