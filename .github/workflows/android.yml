@@ -23,12 +23,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.14.3
-      # Same signing key every build so new APKs install over old ones:
-      # SIGNING_KEY secret (base64 .jks) if set, else a debug key kept in the Actions cache.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore
+      # SIGNING_KEY secret (base64 .jks) signs every build with the same key, so APKs install over each other.
       - name: Signing key from secrets
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
@@ -37,8 +32,6 @@ jobs:
           echo "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "SIGNING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
       - run: gradle --no-daemon testDebugUnitTest assembleDebug
-        env:
-          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
       - name: Publish APK
         env:
           GH_TOKEN: ${{ github.token }}

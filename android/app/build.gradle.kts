@@ -17,13 +17,13 @@ android {
         versionName = "0.1.$build"
     }
 
-    // Optional permanent key from CI secrets; otherwise the (CI-cached) debug key is used.
+    // Permanent key from the SIGNING_KEY CI secret (the keystore itself is the secret); else a throwaway debug key.
     System.getenv("SIGNING_KEYSTORE")?.let { ks ->
         signingConfigs.getByName("debug") {
             storeFile = file(ks)
-            storePassword = System.getenv("SIGNING_PASSWORD")
-            keyAlias = System.getenv("SIGNING_ALIAS") ?: "flash"
-            keyPassword = storePassword
+            storePassword = "flash-release"
+            keyAlias = "flash"
+            keyPassword = "flash-release"
         }
     }
 
