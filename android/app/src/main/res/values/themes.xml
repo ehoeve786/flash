@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.Flash" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#2E7D00</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">@color/comma_green</item>
+        <item name="colorOnPrimaryContainer">#000000</item>
+        <item name="colorSecondaryContainer">#D8EDC8</item>
+        <item name="colorOnSecondaryContainer">#112006</item>
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

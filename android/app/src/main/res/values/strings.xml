@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">comma flash</string>
+    <string name="tagline">Erases the device and installs the latest AGNOS + openpilot release.</string>
+    <string name="connect_title">Connect your device</string>
+    <string name="device_title">Your device</string>
+    <string name="comma3">comma 3</string>
+    <string name="comma3x">comma 3X</string>
+    <string name="comma4">comma four</string>
+    <string name="steps_three">1. Unplug the device and wait for the light on the back to turn off.\n2. Connect port 1 to this phone (USB-C OTG adapter recommended).\n3. Connect port 2 to a power brick.\n\nThe screen stays blank in EDL mode; that\'s normal.</string>
+    <string name="steps_four">1. Unplug the device.\n2. Connect port 1 to this phone (USB-C OTG adapter recommended).\n3. Connect port 2 to a power brick.\n\nThe screen stays blank in EDL mode; that\'s normal.</string>
+    <string name="keep_open">Flashing keeps running in the background. Download AGNOS on the Flash tab ahead of time to flash without waiting; it needs a few GB free.</string>
+    <string name="flash">Flash AGNOS</string>
+    <string name="reboot_edl">Reboot to EDL</string>
+    <string name="reboot_fastboot">Reboot to fastboot</string>
+    <string name="log">Log</string>
+    <string name="verbose">Verbose</string>
+    <string name="log_copy">Copy log</string>
+    <string name="log_share">Share log</string>
+    <string name="tab_device">Device</string>
+    <string name="tab_flash">Flash</string>
+    <string name="agnos_title">AGNOS release</string>
+    <string name="agnos_download">Download</string>
+    <string name="agnos_check">Check for updates</string>
+    <string name="agnos_delete">Delete download</string>
+</resources>

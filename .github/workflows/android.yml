@@ -1,0 +1,42 @@
+name: android
+
+on:
+  push:
+    paths: ["android/**", "src/QDL/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.14.3
+      # SIGNING_KEY secret (base64 .jks) signs every build with the same key, so APKs install over each other.
+      - name: Signing key from secrets
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        if: env.SIGNING_KEY != ''
+        run: |
+          echo "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "SIGNING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - run: gradle --no-daemon testDebugUnitTest assembleDebug
+      - name: Publish APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk comma-flash.apk
+          gh release delete android-latest -y --cleanup-tag || true
+          gh release create android-latest comma-flash.apk --prerelease --target "$GITHUB_SHA" \
+            --title "comma flash (Android) v0.1.${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME}@${GITHUB_SHA::7})" --notes "Build of android/ from ${GITHUB_SHA}. Signed with: $([ -n "$SIGNING_KEYSTORE" ] && echo 'release key (SIGNING_KEY)' || echo 'throwaway debug key')"
