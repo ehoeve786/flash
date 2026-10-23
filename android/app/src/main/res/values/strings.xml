@@ -14,6 +14,8 @@
     <string name="reboot_fastboot">Reboot to fastboot</string>
     <string name="log">Log</string>
     <string name="verbose">Verbose</string>
+    <string name="log_copy">Copy log</string>
+    <string name="log_share">Share log</string>
     <string name="tab_device">Device</string>
     <string name="tab_flash">Flash</string>
     <string name="agnos_title">AGNOS release</string>

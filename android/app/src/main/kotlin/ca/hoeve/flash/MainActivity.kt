@@ -5,6 +5,8 @@ import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -17,6 +19,7 @@ import android.view.View
 import android.widget.CompoundButton
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -78,6 +81,14 @@ class MainActivity : AppCompatActivity(), Session.Ui {
             List(devices.childCount) { devices.getChildAt(it) }
         devices.addOnButtonCheckedListener { _, id, checked -> if (checked) select(Model.entries.first { it.btn == id }) }
         devices.check((Model.entries.getOrNull(prefs.getInt(PREF_MODEL, Model.C3X.ordinal)) ?: Model.C3X).btn)
+        findViewById<View>(R.id.logCopy).setOnClickListener {
+            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("comma flash log", logReport()))
+            if (Build.VERSION.SDK_INT < 33) Toast.makeText(this, "Log copied", Toast.LENGTH_SHORT).show() // 13+ shows its own
+        }
+        findViewById<View>(R.id.logShare).setOnClickListener {
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                .putExtra(Intent.EXTRA_SUBJECT, "comma flash log").putExtra(Intent.EXTRA_TEXT, logReport()), null))
+        }
         Session.verbose = prefs.getBoolean(PREF_VERBOSE, false)
         findViewById<CompoundButton>(R.id.verbose).apply {
             isChecked = Session.verbose
@@ -151,6 +162,12 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         findViewById<TextView>(R.id.steps).setText(m.steps)
         agnosInfo()
     }
+
+    /** Log with enough context to debug from. */
+    private fun logReport() = "comma flash ${packageManager.getPackageInfo(packageName, 0).versionName} · " +
+        "${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} · selected ${Images.NAMES[model.type]} · " +
+        "verbose ${if (Session.verbose) "on" else "off"}\nStatus: ${Session.status.ifEmpty { "idle" }}\n\n" +
+        Session.readLog(-1, 0).third
 
     private fun store(m: Model = model) = Images(noBackupFilesDir, m.type, Session::progress, Session::log)
 

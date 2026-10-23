@@ -297,6 +297,23 @@
                     android:text="@string/log"
                     android:textAppearance="?attr/textAppearanceTitleMedium" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/logCopy"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/log_copy"
+                    app:icon="@drawable/ic_copy" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/logShare"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:contentDescription="@string/log_share"
+                    app:icon="@drawable/ic_share" />
+
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/verbose"
                     android:layout_width="wrap_content"
