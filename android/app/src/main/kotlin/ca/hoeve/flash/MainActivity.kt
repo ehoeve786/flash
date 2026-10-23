@@ -1,5 +1,6 @@
 package ca.hoeve.flash
 
+import android.Manifest
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.app.PendingIntent
@@ -7,11 +8,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
@@ -20,9 +21,8 @@ import androidx.core.widget.NestedScrollView
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import kotlin.concurrent.thread
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), Session.Ui {
     /** Selectable devices: Firehose device type, picker button and the website's images/steps. */
     private enum class Model(val type: Int, val btn: Int, val product: Int, val ports: Int, val steps: Int) {
         C3(32, R.id.c3, R.drawable.comma3x, R.drawable.qdl_ports_three, R.string.steps_three),
@@ -32,7 +32,6 @@ class MainActivity : AppCompatActivity() {
 
     private val usb by lazy { getSystemService(UsbManager::class.java) }
     private val prefs by lazy { getPreferences(MODE_PRIVATE) }
-    private val programmer by lazy { assets.open("programmer.bin").use { it.readBytes() } }
     private lateinit var controls: List<View>
     private lateinit var bar: LinearProgressIndicator
     private lateinit var status: TextView
@@ -41,9 +40,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logScroll: NestedScrollView
     private var model = Model.C3X
     private var pulse: ValueAnimator? = null
-    @Volatile private var running = false
-    private var lastStatus = ""
-    private var lastPermille = Int.MIN_VALUE
+    private var shown: String? = null
     private var pending: ((UsbDevice) -> Unit)? = null
 
     private val permReceiver = object : BroadcastReceiver() {
@@ -55,7 +52,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
         bar = findViewById(R.id.progress)
         status = findViewById(R.id.status)
@@ -70,17 +66,57 @@ class MainActivity : AppCompatActivity() {
         devices.addOnButtonCheckedListener { _, id, checked -> if (checked) select(Model.entries.first { it.btn == id }) }
         devices.check((Model.entries.getOrNull(prefs.getInt(PREF_MODEL, Model.C3X.ordinal)) ?: Model.C3X).btn)
         val f = IntentFilter(ACTION_PERM)
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(permReceiver, f, Context.RECEIVER_NOT_EXPORTED) else registerReceiver(permReceiver, f)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(permReceiver, f, Context.RECEIVER_NOT_EXPORTED)
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
+            }
+        } else registerReceiver(permReceiver, f)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        Session.ui = this
+        onLog()
+        onProgress()
+    }
+
+    override fun onStop() {
+        Session.ui = null
+        super.onStop()
     }
 
     override fun onResume() {
         super.onResume()
-        if (!running) idle()
+        if (!Session.running && Session.status.isEmpty()) idle()
     }
 
     override fun onDestroy() {
         unregisterReceiver(permReceiver)
         super.onDestroy()
+    }
+
+    override fun onLog() {
+        logView.text = Session.logText
+        logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    override fun onProgress() {
+        val busy = Session.running
+        controls.forEach { it.isEnabled = !busy }
+        val s = Session.status
+        if (s.isEmpty()) return
+        val pm = Session.permille
+        setBar(pm)
+        status.text = if (pm in 1..999) "$s… ${pm / 10}%" else s
+        if (s == shown && busy) return
+        shown = s
+        when {
+            s.startsWith("Failed") -> state(R.drawable.ic_device_exclamation_c3, R.color.state_error, false)
+            s.startsWith("Done") || s.startsWith("Reboot sent") -> state(R.drawable.ic_done, R.color.state_done, false)
+            s.startsWith("Connecting") || s.startsWith("Rebooting") -> state(R.drawable.ic_cable, R.color.state_wait, busy)
+            else -> state(R.drawable.ic_system_update_c3, R.color.state_work, busy)
+        }
     }
 
     private fun select(m: Model) {
@@ -138,7 +174,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun start(action: (UsbDevice) -> Unit) {
-        if (running) return
+        if (Session.running) return
         val d = device() ?: return idle("No device in EDL, fastboot or ADB mode found. Follow the steps below.")
         if (usb.hasPermission(d)) action(d)
         else {
@@ -152,11 +188,20 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(android.R.string.ok) { _, _ -> go() }.show()
     }
 
+    private fun launch(d: UsbDevice, job: (Link) -> Unit) {
+        shown = null
+        Session.run(this, d, d.adb ?: d.getInterface(0), job)
+    }
+
     private fun flash(d: UsbDevice) {
         if (!d.edl) return idle("Device is not in EDL mode. Tap Reboot to EDL first.")
         val m = model
+        val app = applicationContext
         confirm("Erase and reflash this ${findViewById<TextView>(m.btn).text}? Everything except the persist partition is erased.") {
-            work(d) { Flasher(Qdl(it, programmer, ::log), noBackupFilesDir, m.type, ::progress, ::log).run() }
+            launch(d) {
+                val programmer = app.assets.open("programmer.bin").use { s -> s.readBytes() }
+                Flasher(Qdl(it, programmer, Session::log), app.noBackupFilesDir, m.type, Session::progress, Session::log).run()
+            }
         }
     }
 
@@ -169,69 +214,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun rebootNow(d: UsbDevice, edl: Boolean, target: String) {
-        work(d) {
-            progress("Rebooting to $target", -1.0)
+        val app = applicationContext
+        val isAdb = d.adb != null
+        launch(d) {
+            Session.progress("Rebooting to $target", -1.0)
             when {
-                d.adb != null -> Adb(it, Adb.key(filesDir)).run { connect(::log); service(if (edl) "reboot:edl" else "reboot:bootloader") }
-                d.fastboot -> if (edl) Fastboot.rebootEdl(it, ::log) else check(Fastboot.command(it, "reboot-bootloader")) { "reboot-bootloader failed" }
-                else -> Qdl(it, programmer, ::log).apply { connect() }.fh.reset("reset_to_edl")
+                isAdb -> Adb(it, Adb.key(app.filesDir)).run { connect(Session::log); service(if (edl) "reboot:edl" else "reboot:bootloader") }
+                d.fastboot -> if (edl) Fastboot.rebootEdl(it, Session::log) else check(Fastboot.command(it, "reboot-bootloader")) { "reboot-bootloader failed" }
+                else -> Qdl(it, app.assets.open("programmer.bin").use { s -> s.readBytes() }, Session::log).apply { connect() }.fh.reset("reset_to_edl")
             }
-            progress("Reboot sent. Wait for the device to reconnect in $target mode", 1.0)
-        }
-    }
-
-    private fun work(d: UsbDevice, job: (Link) -> Unit) {
-        running = true
-        controls.forEach { it.isEnabled = false }
-        logView.text = ""
-        lastStatus = ""
-        thread {
-            val conn = usb.openDevice(d)
-            try {
-                checkNotNull(conn) { "Could not open USB device" }
-                job(UsbLink(conn, d.adb ?: d.getInterface(0)))
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed", e)
-                log("ERROR: ${e.message ?: e}")
-                progress("Failed: ${e.message ?: e}", 0.0)
-            } finally {
-                conn?.close()
-                runOnUiThread { running = false; controls.forEach { it.isEnabled = true } }
-            }
-        }
-    }
-
-    /** Called from the worker thread; only posts when the visible value changes. */
-    private fun progress(s: String, p: Double) {
-        val pm = if (p < 0) -1 else (p.coerceAtMost(1.0) * 1000).toInt()
-        val changed = s != lastStatus
-        if (!changed && pm == lastPermille) return
-        lastStatus = s
-        lastPermille = pm
-        runOnUiThread {
-            setBar(pm)
-            status.text = if (pm in 1..999) "$s… ${pm / 10}%" else s
-            if (changed) when {
-                s.startsWith("Failed") -> state(R.drawable.ic_device_exclamation_c3, R.color.state_error, false)
-                s.startsWith("Done") || s.startsWith("Reboot sent") -> state(R.drawable.ic_done, R.color.state_done, false)
-                s.startsWith("Connecting") || s.startsWith("Rebooting") -> state(R.drawable.ic_cable, R.color.state_wait, true)
-                else -> state(R.drawable.ic_system_update_c3, R.color.state_work, true)
-            }
-        }
-    }
-
-    private fun log(m: String) {
-        Log.i(TAG, m)
-        // Device INFO chatter goes to logcat only.
-        if (m.startsWith("device: ") && "ERROR" !in m && "WARN" !in m) return
-        runOnUiThread {
-            logView.append(m + "\n")
-            logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
+            Session.progress("Reboot sent. Wait for the device to reconnect in $target mode", 1.0)
         }
     }
 
     private companion object {
-        const val TAG = "flash"
         const val ACTION_PERM = "ca.hoeve.flash.USB_PERMISSION"
         const val PREF_MODEL = "model"
     }
