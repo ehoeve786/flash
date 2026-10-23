@@ -14,6 +14,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.widget.CompoundButton
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -41,6 +42,8 @@ class MainActivity : AppCompatActivity(), Session.Ui {
     private var model = Model.C3X
     private var pulse: ValueAnimator? = null
     private var shown: String? = null
+    private var logGen = -1
+    private var logLen = 0
     private var pending: ((UsbDevice) -> Unit)? = null
 
     private val permReceiver = object : BroadcastReceiver() {
@@ -65,6 +68,11 @@ class MainActivity : AppCompatActivity(), Session.Ui {
             List(devices.childCount) { devices.getChildAt(it) }
         devices.addOnButtonCheckedListener { _, id, checked -> if (checked) select(Model.entries.first { it.btn == id }) }
         devices.check((Model.entries.getOrNull(prefs.getInt(PREF_MODEL, Model.C3X.ordinal)) ?: Model.C3X).btn)
+        Session.verbose = prefs.getBoolean(PREF_VERBOSE, false)
+        findViewById<CompoundButton>(R.id.verbose).apply {
+            isChecked = Session.verbose
+            setOnCheckedChangeListener { _, on -> Session.verbose = on; prefs.edit().putBoolean(PREF_VERBOSE, on).apply() }
+        }
         val f = IntentFilter(ACTION_PERM)
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(permReceiver, f, Context.RECEIVER_NOT_EXPORTED)
@@ -77,6 +85,7 @@ class MainActivity : AppCompatActivity(), Session.Ui {
     override fun onStart() {
         super.onStart()
         Session.ui = this
+        logGen = -1 // full redraw
         onLog()
         onProgress()
     }
@@ -97,7 +106,10 @@ class MainActivity : AppCompatActivity(), Session.Ui {
     }
 
     override fun onLog() {
-        logView.text = Session.logText
+        val (g, len, text) = Session.readLog(logGen, logLen)
+        if (g == logGen) logView.append(text) else logView.text = text
+        logGen = g
+        logLen = len
         logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
     }
 
@@ -231,5 +243,6 @@ class MainActivity : AppCompatActivity(), Session.Ui {
     private companion object {
         const val ACTION_PERM = "ca.hoeve.flash.USB_PERMISSION"
         const val PREF_MODEL = "model"
+        const val PREF_VERBOSE = "verbose"
     }
 }

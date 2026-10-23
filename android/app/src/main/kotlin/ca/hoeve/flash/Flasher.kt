@@ -84,7 +84,8 @@ class Flasher(
         val f = File(dir, "${im.name}.img")
         val label = "Downloading ${im.name}"
         status(label, 0.0)
-        val http = HttpIn(im.url) { status(label, it) }
+        log("debug: GET ${im.url}")
+        val http = HttpIn(im.url, log) { status(label, it) }
         (if (im.url.endsWith(".xz")) XZInputStream(http.buffered(1 shl 16)) else http).use { inp ->
             f.outputStream().use { inp.copyTo(it, 1 shl 20) }
         }
@@ -92,7 +93,7 @@ class Flasher(
     }
 
     /** Resumes with HTTP Range requests on network errors (like stream.js). */
-    private class HttpIn(private val url: String, private val onProgress: (Double) -> Unit) : InputStream() {
+    private class HttpIn(private val url: String, private val log: (String) -> Unit, private val onProgress: (Double) -> Unit) : InputStream() {
         private var pos = 0L
         private var total = -1L
         private var s: InputStream? = null
@@ -127,6 +128,7 @@ class Flasher(
                     runCatching { s?.close() }
                     s = null
                     if (++attempt > 3) throw e
+                    log("debug: download error at byte $pos (${e.message}), retry $attempt/3")
                     Thread.sleep(1000L * attempt)
                 }
             }

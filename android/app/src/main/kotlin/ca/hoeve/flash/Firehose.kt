@@ -80,6 +80,7 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
     }
 
     fun readBuffer(lun: Int, start: Long, sectors: Int): ByteArray {
+        log("debug: read LUN $lun @$start ×$sectors")
         usb.write(xml("read", "SECTOR_SIZE_IN_BYTES" to SECTOR, "num_partition_sectors" to sectors,
             "physical_partition_number" to lun, "start_sector" to start))
         val r = waitForData(1)
@@ -92,6 +93,7 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
 
     fun program(lun: Int, start: Long, src: Src, onProgress: ((Long) -> Unit)? = null): Boolean {
         val total = src.size
+        log("debug: program LUN $lun @$start ×${(total + SECTOR - 1) / SECTOR} ($total bytes)")
         val r0 = send(xml("program", "SECTOR_SIZE_IN_BYTES" to SECTOR, "num_partition_sectors" to (total + SECTOR - 1) / SECTOR,
             "physical_partition_number" to lun, "start_sector" to start))
         // Stricter than qdl.js (which only rejects NAK+rawmode=false): never stream data the device did not ACK.
@@ -115,6 +117,7 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
     }
 
     fun erase(lun: Int, start: Long, sectors: Int) {
+        log("debug: erase LUN $lun @$start ×$sectors")
         val r = send(xml("erase", "SECTOR_SIZE_IN_BYTES" to SECTOR, "num_partition_sectors" to sectors,
             "physical_partition_number" to lun, "start_sector" to start), 30)
         check(r.ack) { "Failed to erase LUN $lun sector $start: ${r.rsp}" }

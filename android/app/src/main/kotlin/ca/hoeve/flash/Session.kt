@@ -8,6 +8,7 @@ import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /** Process-wide job state, so work outlives the activity. Observed by the UI and the service notification. */
@@ -23,8 +24,16 @@ object Session {
         private set
     @Volatile var permille = 0
         private set
+    /** Also show device INFO messages and per-command "debug: " lines. */
+    @Volatile var verbose = false
     private val buf = StringBuilder()
-    val logText: String get() = synchronized(buf) { buf.toString() }
+    private var gen = 0 // bumped when the buffer is cleared or trimmed
+    private val logPosted = AtomicBoolean()
+
+    /** (generation, length, text): text is the whole log if [fromGen] is stale, else what was added after [from]. */
+    fun readLog(fromGen: Int, from: Int): Triple<Int, Int, String> = synchronized(buf) {
+        Triple(gen, buf.length, if (fromGen == gen) buf.substring(from) else buf.toString())
+    }
 
     /** Main thread only. */
     var ui: Ui? = null
@@ -38,7 +47,7 @@ object Session {
         val app = ctx.applicationContext
         running = true
         status = ""
-        synchronized(buf) { buf.setLength(0) }
+        synchronized(buf) { buf.setLength(0); gen++ }
         ui?.onLog()
         app.startForegroundService(Intent(app, FlashService::class.java))
         thread {
@@ -74,10 +83,14 @@ object Session {
 
     fun log(m: String) {
         Log.i(TAG, m)
-        if (m.startsWith("device: ") && "ERROR" !in m && "WARN" !in m) return // device INFO chatter: logcat only
-        synchronized(buf) { buf.append(m).append('\n') }
-        main.post { ui?.onLog() }
+        if (!verbose && (m.startsWith("debug: ") || m.startsWith("device: ") && "ERROR" !in m && "WARN" !in m)) return // logcat only
+        synchronized(buf) {
+            buf.append(m).append('\n')
+            if (buf.length > MAX_LOG) { buf.delete(0, buf.length - MAX_LOG / 2); gen++ } // keep the UI responsive
+        }
+        if (logPosted.compareAndSet(false, true)) main.post { logPosted.set(false); ui?.onLog() } // coalesce bursts
     }
 
     private const val TAG = "flash"
+    private const val MAX_LOG = 256 * 1024
 }

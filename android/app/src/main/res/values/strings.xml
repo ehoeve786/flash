@@ -13,4 +13,5 @@
     <string name="reboot_edl">Reboot to EDL</string>
     <string name="reboot_fastboot">Reboot to fastboot</string>
     <string name="log">Log</string>
+    <string name="verbose">Verbose</string>
 </resources>
