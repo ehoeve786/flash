@@ -86,14 +86,18 @@ class Qdl(private val usb: Link, private val programmer: ByteArray, private val 
 
     fun flash(name: String, file: File, onProgress: (Long) -> Unit) {
         val (lun, p) = detect(name) ?: error("Can't find partition $name")
+        val bytes = p.sectors * Firehose.SECTOR
         RandomAccessFile(file, "r").channel.use { ch ->
             val chunks = Sparse.chunks(ch)
             if (chunks == null) {
-                check((ch.size() + Firehose.SECTOR - 1) / Firehose.SECTOR <= p.sectors) { "Image too large for $name" }
+                check(ch.size() <= bytes) { "Image too large for $name" }
                 check(fh.program(lun, p.start, FileSrc(ch, 0, ch.size()), onProgress)) { "Flashing $name failed" }
-            } else for ((off, src) in chunks) {
-                check(off % Firehose.SECTOR == 0L) { "Sparse offset not sector aligned" }
-                check(fh.program(lun, p.start + off / Firehose.SECTOR, src) { onProgress(off + it) }) { "Flashing $name failed" }
+            } else {
+                // Validate every chunk before writing any, so a bad image can't spill into the next partition.
+                check(chunks.all { (off, src) -> off % Firehose.SECTOR == 0L && off + src.size <= bytes }) { "Sparse image doesn't fit $name" }
+                for ((off, src) in chunks) {
+                    check(fh.program(lun, p.start + off / Firehose.SECTOR, src) { onProgress(off + it) }) { "Flashing $name failed" }
+                }
             }
         }
     }

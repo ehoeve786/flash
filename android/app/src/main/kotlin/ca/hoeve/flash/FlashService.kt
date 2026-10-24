@@ -39,7 +39,7 @@ class FlashService : Service() {
         Session.stopper = null
         if (wake.isHeld) wake.release()
         if (wifi.isHeld) wifi.release()
-        nm.notify(DONE_ID, builder().setContentTitle(Session.status).setAutoCancel(true).build())
+        if (Session.status.isNotEmpty()) nm.notify(DONE_ID, builder().setContentTitle(Session.status).setAutoCancel(true).build())
         super.onDestroy()
     }
 

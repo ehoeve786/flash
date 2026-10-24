@@ -129,4 +129,16 @@ class ProtocolTest {
         }
         assertEquals(null, RandomAccessFile(f.apply { writeBytes(ByteArray(64)) }, "r").channel.use(Sparse::chunks))
     }
+
+    @Test fun sparseRejectsMalformedChunks() {
+        val f = File.createTempFile("bad", ".img").apply { deleteOnExit() }
+        fun image(type: Int, blocks: Int, data: ByteArray) =
+            le(28).putInt(0xed26ff3a.toInt()).putShort(1).putShort(0).putShort(28).putShort(12).putInt(4096).putInt(blocks).putInt(1).putInt(0).array() +
+                le(12 + data.size).putShort(type.toShort()).putShort(0).putInt(blocks).putInt(12 + data.size).put(data).array()
+        for ((type, blocks, data) in listOf(Triple(0xCAC1, 2, ByteArray(4096)), Triple(0xCAC9, 1, ByteArray(0)))) {
+            f.writeBytes(image(type, blocks, data))
+            val e = runCatching { RandomAccessFile(f, "r").channel.use(Sparse::chunks) }.exceptionOrNull()
+            assertTrue("type 0x%x should be rejected".format(type), e is IllegalStateException)
+        }
+    }
 }

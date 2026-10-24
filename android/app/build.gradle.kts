@@ -17,15 +17,24 @@ android {
         versionName = "0.1.$build"
     }
 
-    // Permanent key from the SIGNING_KEY CI secret (the keystore itself is the secret); else a throwaway debug key.
-    System.getenv("SIGNING_KEYSTORE")?.let { ks ->
-        signingConfigs.getByName("debug") {
-            storeFile = file(ks)
-            storePassword = "flash-release"
-            keyAlias = "flash"
-            keyPassword = "flash-release"
+    // Permanent key from the SIGNING_KEY / SIGNING_PASSWORD CI secrets.
+    signingConfigs {
+        System.getenv("SIGNING_KEYSTORE")?.let { ks ->
+            create("release") {
+                storeFile = file(ks)
+                storePassword = checkNotNull(System.getenv("SIGNING_PASSWORD")) { "SIGNING_PASSWORD secret not set" }
+                keyAlias = "flash"
+                keyPassword = storePassword // PKCS12: key and store share one password
+            }
         }
     }
+
+    buildTypes {
+        // Ship release (non-debuggable: a debug APK lets `adb run-as` read the app's private ADB key).
+        release { signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug") }
+    }
+
+    lint { checkReleaseBuilds = false }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

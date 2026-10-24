@@ -28,11 +28,12 @@ class Adb(private val usb: Link, private val key: KeyPair) {
         val h = usb.readFully(24, timeout)
         if (h.size < 24) return null
         val n = h.u32(12)
+        check(n in 0..MAX_DATA) { "ADB message too large ($n)" }
         return Msg(h.u32(0), if (n > 0) usb.readFully(n, timeout) else ByteArray(0))
     }
 
     fun connect(log: (String) -> Unit) {
-        send(CNXN, 0x01000000, 256 * 1024, "host::\u0000".toByteArray())
+        send(CNXN, 0x01000000, MAX_DATA, "host::\u0000".toByteArray())
         var stage = 0
         while (true) {
             val m = recv(if (stage == 2) 60000 else 5000) ?: error("No response from adbd")
@@ -50,7 +51,7 @@ class Adb(private val usb: Link, private val key: KeyPair) {
     /** Opens [service]; a reboot drops the device, so no reply is required. */
     fun service(service: String) {
         send(OPEN, 1, 0, "$service\u0000".toByteArray())
-        recv(3000)
+        check(recv(3000)?.cmd != CLSE) { "Device refused $service" }
     }
 
     /** Android's RSAPublicKey struct, base64-encoded, as adbd expects. */
@@ -72,6 +73,8 @@ class Adb(private val usb: Link, private val key: KeyPair) {
         private const val CNXN = 0x4e584e43
         private const val AUTH = 0x48545541
         private const val OPEN = 0x4e45504f
+        private const val CLSE = 0x45534c43
+        private const val MAX_DATA = 256 * 1024
         private val SHA1_INFO = byteArrayOf(0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14)
 
         /** Loads or creates the app's persistent ADB key, so the device only has to trust it once. */
