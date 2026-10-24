@@ -147,3 +147,26 @@ class Images(base: File, val type: Int, private val status: (String, Double) -> 
         fun gb(bytes: Long) = "%.1f GB".format(bytes / 1e9)
     }
 }
+
+/** Firehose programmer, downloaded from comma's flash repo (the URL flash.comma.ai uses) and kept for offline flashing. */
+object Loader {
+    private const val URL_ = "https://raw.githubusercontent.com/commaai/flash/master/src/QDL/programmer.bin"
+
+    fun get(dir: File, log: (String) -> Unit): ByteArray {
+        val f = File(dir, "programmer.bin")
+        return try {
+            val b = (URL(URL_).openConnection().apply { connectTimeout = 10000; readTimeout = 15000 }).getInputStream().use { it.readBytes() }
+            check(b.size > 4 && b[0].toInt() == 0x7f && String(b, 1, 3) == "ELF") { "not an ELF file" }
+            if (!f.exists() || !f.readBytes().contentEquals(b)) {
+                val part = File(dir, "programmer.part").apply { writeBytes(b) }
+                check(part.renameTo(f)) { "could not save it" }
+                log("Loader updated (${b.size} bytes)")
+            }
+            b
+        } catch (e: Exception) {
+            if (!f.exists()) throw IllegalStateException("Could not download the flashing loader (${e.message}). Connect to the internet and try again.", e)
+            log("Could not download the loader (${e.message}); using the saved copy")
+            f.readBytes()
+        }
+    }
+}

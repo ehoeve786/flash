@@ -27,9 +27,6 @@ android {
         }
     }
 
-    // Ship the same Firehose programmer the web flasher uses.
-    sourceSets["main"].assets.srcDir("../../src/QDL")
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
