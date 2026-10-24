@@ -41,4 +41,4 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk comma-flash.apk
           gh release delete android-latest -y --cleanup-tag || true
           gh release create android-latest comma-flash.apk --prerelease --target "$GITHUB_SHA" \
-            --title "comma flash (Android) v0.1.${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME}@${GITHUB_SHA::7})" --notes "Build of android/ from ${GITHUB_SHA}. Signed with: $([ -n "$SIGNING_KEYSTORE" ] && echo 'release key (SIGNING_KEY)' || echo 'throwaway debug key')"
+            --title "comma flash (Android) v0.1.${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME}@${GITHUB_SHA::7})" --notes "Build of android/ from ${GITHUB_SHA}. Signed with: $([ -n "$SIGNING_KEYSTORE" ] && echo 'release key' || echo 'throwaway debug key')"
