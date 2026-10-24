@@ -249,7 +249,7 @@ class MainActivity : AppCompatActivity(), Session.Ui {
 
     private fun start(action: (UsbDevice) -> Unit) {
         if (Session.running) return
-        val d = device() ?: return idle("No device in EDL, fastboot or ADB mode found. Follow the steps below.")
+        val d = device() ?: return idle("No device in EDL, fastboot or ADB mode found. Follow the steps on the Device tab.")
         if (usb.hasPermission(d)) action(d)
         else {
             pending = action
