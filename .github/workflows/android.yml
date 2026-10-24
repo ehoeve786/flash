@@ -23,7 +23,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.14.3
-      # SIGNING_KEY secret (base64 .jks) signs every build with the same key, so APKs install over each other.
+      # SIGNING_KEY (base64 .jks) + SIGNING_PASSWORD secrets sign every build with the same key, so APKs install over each other.
       - name: Signing key from secrets
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
@@ -32,6 +32,8 @@ jobs:
           echo "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "SIGNING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
       - run: gradle --no-daemon testReleaseUnitTest assembleRelease
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
       - name: Publish APK
         env:
           GH_TOKEN: ${{ github.token }}

@@ -17,14 +17,14 @@ android {
         versionName = "0.1.$build"
     }
 
-    // Permanent key from the SIGNING_KEY CI secret (the keystore itself is the secret).
+    // Permanent key from the SIGNING_KEY / SIGNING_PASSWORD CI secrets.
     signingConfigs {
         System.getenv("SIGNING_KEYSTORE")?.let { ks ->
             create("release") {
                 storeFile = file(ks)
-                storePassword = "flash-release"
+                storePassword = checkNotNull(System.getenv("SIGNING_PASSWORD")) { "SIGNING_PASSWORD secret not set" }
                 keyAlias = "flash"
-                keyPassword = "flash-release"
+                keyPassword = storePassword // PKCS12: key and store share one password
             }
         }
     }
