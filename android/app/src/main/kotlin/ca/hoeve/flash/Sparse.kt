@@ -10,6 +10,7 @@ object Sparse {
     private const val RAW = 0xCAC1
     private const val FILL = 0xCAC2
     private const val SKIP = 0xCAC3
+    private const val CRC32 = 0xCAC4
 
     private fun read(ch: FileChannel, pos: Long, n: Int): ByteBuffer {
         val b = ByteBuffer.allocate(n).order(ByteOrder.LITTLE_ENDIAN)
@@ -32,15 +33,22 @@ object Sparse {
             val c = read(ch, pos, 12)
             val len = (c.getInt(4).toLong() and 0xFFFFFFFFL) * blockSize
             val total = c.getInt(8).toLong() and 0xFFFFFFFFL
-            check(pos + total <= size) { "Sparse - Chunk data out of bounds" }
-            when (c.getShort(0).toInt() and 0xFFFF) {
-                RAW -> { out += offset to FileSrc(ch, pos + 12, total - 12); offset += len }
+            check(total >= 12 && pos + total <= size) { "Sparse - Chunk data out of bounds" }
+            when (val type = c.getShort(0).toInt() and 0xFFFF) {
+                RAW -> {
+                    check(total - 12 == len) { "Sparse - Raw chunk size mismatch" }
+                    out += offset to FileSrc(ch, pos + 12, len)
+                    offset += len
+                }
                 FILL -> {
+                    check(total == 16L) { "Sparse - Bad fill chunk" }
                     val p = read(ch, pos + 12, 4).array()
                     if (p.any { it.toInt() != 0 }) out += offset to FillSrc(p, len)
                     offset += len
                 }
                 SKIP -> offset += len
+                CRC32 -> Unit
+                else -> error("Sparse - Unhandled chunk type 0x%x".format(type))
             }
             pos += total
         }

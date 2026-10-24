@@ -2,7 +2,7 @@ name: android
 
 on:
   push:
-    paths: ["android/**", "src/QDL/**", ".github/workflows/android.yml"]
+    paths: ["android/**", ".github/workflows/android.yml"]
   workflow_dispatch:
 
 permissions:
@@ -31,12 +31,12 @@ jobs:
         run: |
           echo "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "SIGNING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-      - run: gradle --no-daemon testDebugUnitTest assembleDebug
+      - run: gradle --no-daemon testReleaseUnitTest assembleRelease
       - name: Publish APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk comma-flash.apk
+          cp app/build/outputs/apk/release/app-release.apk comma-flash.apk
           gh release delete android-latest -y --cleanup-tag || true
           gh release create android-latest comma-flash.apk --prerelease --target "$GITHUB_SHA" \
             --title "comma flash (Android) v0.1.${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME}@${GITHUB_SHA::7})" --notes "Build of android/ from ${GITHUB_SHA}. Signed with: $([ -n "$SIGNING_KEYSTORE" ] && echo 'release key (SIGNING_KEY)' || echo 'throwaway debug key')"

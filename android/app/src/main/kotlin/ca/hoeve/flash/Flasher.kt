@@ -12,12 +12,15 @@ class Flasher(
     private val log: (String) -> Unit,
 ) {
     fun run() {
+        // Download and verify everything before touching the device, so a network failure can't leave it half-erased.
+        val images = store.manifest()
+        images.filter { it.needed }.forEach { store.ensure(it) }
+
         status("Connecting", -1.0)
         qdl.connect()
         log("Connected ${qdl.serial}")
         val type = qdl.fh.deviceType()
         check(type == store.type) { "Selected ${Images.NAMES[store.type]} but the connected device is ${Images.NAMES[type] ?: "unknown (type $type)"}" }
-        val images = store.manifest()
 
         val info = JSONObject(qdl.fh.storageInfo()).getJSONObject("storage_info")
         val userdata = userdataImage(info)

@@ -152,7 +152,7 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
     /** JSON text of the storage info log line. */
     fun storageInfo(): String =
         send(xml("getstorageinfo", "physical_partition_number" to 0)).logs.firstOrNull { "storage_info" in it }
-            ?.substring("INFO: ".length) ?: error("Storage info JSON not returned")
+            ?.let { it.substring(it.indexOf('{')) } ?: error("Storage info JSON not returned")
 
     fun deviceType(): Int? = send(xml("devicetype")).rsp["DeviceType"]?.toIntOrNull()
 
@@ -162,7 +162,7 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
         private const val MAX_XML = 4096
         private val TAG = Regex("""<(response|log)((?:\s+[\w:.-]+\s*=\s*"[^"]*")*)\s*/?>""")
         private val ATTR = Regex("""([\w:.-]+)\s*=\s*"([^"]*)"""")
-        private val NUM = Regex("&#(x?)([0-9a-fA-F]+);")
+        private val NUM = Regex("&#(?:x([0-9a-fA-F]+)|([0-9]+));")
 
         fun xml(tag: String, vararg a: Pair<String, Any>) =
             "<?xml version=\"1.0\" ?><data><$tag${a.joinToString("") { " ${it.first}=\"${it.second}\"" }} /></data>".toByteArray()
@@ -179,7 +179,7 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
 
         private fun unescape(s: String) = if ('&' !in s) s else s
             .replace("&quot;", "\"").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">")
-            .replace(NUM) { it.groupValues[2].toInt(if (it.groupValues[1].isEmpty()) 10 else 16).toChar().toString() }
+            .replace(NUM) { m -> (m.groupValues[1].takeIf(String::isNotEmpty)?.toInt(16) ?: m.groupValues[2].toInt()).toChar().toString() }
             .replace("&amp;", "&")
     }
 }

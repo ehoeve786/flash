@@ -8,6 +8,12 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.DigestOutputStream
+import java.security.MessageDigest
+
+/** GET with timeouts (URL.readText/readBytes can hang forever on a stalled network). */
+internal fun httpGet(url: String): ByteArray =
+    URL(url).openConnection().apply { connectTimeout = 15000; readTimeout = 30000 }.getInputStream().use { it.readBytes() }
 
 class Image(j: JSONObject) {
     val name: String = j.getString("name")
@@ -15,7 +21,9 @@ class Image(j: JSONObject) {
     val hasAB = j.getBoolean("has_ab")
     val gptLun = j.optJSONObject("gpt")?.getInt("lun")
     val url: String = j.getString("url")
+    /** SHA-256 of the unpacked image (unsparsified if [sparse]), as comma's agnos.py verifies it. */
     val hash: String = j.getString("hash_raw")
+    val sparse = j.optBoolean("sparse")
     /** Everything except persist (never flashed) is needed; which userdata is used depends on the UFS chip. */
     val needed get() = name != "persist"
 }
@@ -31,8 +39,8 @@ class Images(base: File, val type: Int, private val status: (String, Double) -> 
     /** all-partitions.json with entries replaced by same-named ones from agnos.json (as flash.comma.ai does). */
     private fun fetch(): String {
         val url = MANIFESTS.getValue(type)
-        val all = JSONArray(URL(url).readText())
-        val agnos = JSONArray(URL(url.replace("all-partitions", "agnos")).readText())
+        val all = JSONArray(httpGet(url).decodeToString())
+        val agnos = JSONArray(httpGet(url.replace("all-partitions", "agnos")).decodeToString())
         val byName = List(agnos.length(), agnos::getJSONObject).associateBy { it.getString("name") }
         return JSONArray(List(all.length(), all::getJSONObject).map { byName[it.getString("name")] ?: it }).toString()
     }
@@ -62,8 +70,14 @@ class Images(base: File, val type: Int, private val status: (String, Double) -> 
         status(label, 0.0)
         log("debug: GET ${im.url}")
         val http = HttpIn(im.url, log) { status(label, it) }
+        // Sparse hashes cover the expanded image (up to ~96 GB), so only non-sparse images are hashed; xz's CRC covers the rest.
+        val md = if (im.sparse) null else MessageDigest.getInstance("SHA-256")
         (if (im.url.endsWith(".xz")) XZInputStream(http.buffered(1 shl 16)) else http).use { inp ->
-            part.outputStream().use { inp.copyTo(it, 1 shl 20) }
+            part.outputStream().let { if (md == null) it else DigestOutputStream(it, md) }.use { inp.copyTo(it, 1 shl 20) }
+        }
+        if (md != null) {
+            val got = md.digest().joinToString("") { "%02x".format(it) }
+            if (!got.equals(im.hash, ignoreCase = true)) { part.delete(); error("${im.name}: SHA-256 mismatch (got $got)") }
         }
         check(part.renameTo(f)) { "Could not save ${f.name}" }
         return f
@@ -155,7 +169,7 @@ object Loader {
     fun get(dir: File, log: (String) -> Unit): ByteArray {
         val f = File(dir, "programmer.bin")
         return try {
-            val b = (URL(URL_).openConnection().apply { connectTimeout = 10000; readTimeout = 15000 }).getInputStream().use { it.readBytes() }
+            val b = httpGet(URL_)
             check(b.size > 4 && b[0].toInt() == 0x7f && String(b, 1, 3) == "ELF") { "not an ELF file" }
             if (!f.exists() || !f.readBytes().contentEquals(b)) {
                 val part = File(dir, "programmer.part").apply { writeBytes(b) }
