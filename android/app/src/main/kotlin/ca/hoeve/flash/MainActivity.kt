@@ -179,7 +179,8 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         if (Session.running) return
         val s = store()
         shown = null
-        Session.run(this) { s.downloadAll(); Session.progress("AGNOS ready for ${Images.NAMES[s.type]} (${Images.gb(s.bytes())})", 1.0) }
+        val dir = noBackupFilesDir
+        Session.run(this) { Loader.get(dir, Session::log); s.downloadAll(); Session.progress("AGNOS ready for ${Images.NAMES[s.type]} (${Images.gb(s.bytes())})", 1.0) }
     }
 
     private fun agnosCheck() {
@@ -278,7 +279,7 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         val s = store(m)
         confirm("Erase and reflash this ${findViewById<TextView>(m.btn).text}? Everything except the persist partition is erased.") {
             launch(d) {
-                val programmer = app.assets.open("programmer.bin").use { s -> s.readBytes() }
+                val programmer = Loader.get(app.noBackupFilesDir, Session::log)
                 Flasher(Qdl(it, programmer, Session::log), s, Session::progress, Session::log).run()
             }
         }
@@ -300,7 +301,7 @@ class MainActivity : AppCompatActivity(), Session.Ui {
             when {
                 isAdb -> Adb(it, Adb.key(app.filesDir)).run { connect(Session::log); service(if (edl) "reboot:edl" else "reboot:bootloader") }
                 d.fastboot -> if (edl) Fastboot.rebootEdl(it, Session::log) else check(Fastboot.command(it, "reboot-bootloader")) { "reboot-bootloader failed" }
-                else -> Qdl(it, app.assets.open("programmer.bin").use { s -> s.readBytes() }, Session::log).apply { connect() }.fh.reset("reset_to_edl")
+                else -> Qdl(it, Loader.get(app.noBackupFilesDir, Session::log), Session::log).apply { connect() }.fh.reset("reset_to_edl")
             }
             Session.progress("Reboot sent. Wait for the device to reconnect in $target mode", 1.0)
         }
