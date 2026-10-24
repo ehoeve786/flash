@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.repository == 'commaai/flash' # Pages deploy only on upstream, not forks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
