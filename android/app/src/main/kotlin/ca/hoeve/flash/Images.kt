@@ -104,12 +104,12 @@ class Images(base: File, val type: Int, private val status: (String, Double) -> 
     /** Images of the latest release that aren't downloaded yet (0 = up to date). Doesn't change the store. */
     fun missing() = parse(fetch()).count { it.needed && !file(it).exists() }
 
-    /** Offline summary for the UI. */
     private fun local() = runCatching { parse(saved.readText()).filter { it.needed } }.getOrNull()
 
     /** The saved release is fully downloaded. */
     fun complete() = local()?.all { file(it).exists() } == true
 
+    /** Offline summary for the UI. */
     fun summary(): String {
         val list = local() ?: return "Not downloaded"
         val have = list.count { file(it).exists() }
