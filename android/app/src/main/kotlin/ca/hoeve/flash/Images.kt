@@ -47,18 +47,28 @@ class Images(base: File, val type: Int, private val status: (String, Double) -> 
 
     fun file(im: Image) = File(dir, "${im.name}-${im.hash}.img")
 
-    /** Latest manifest, saved for offline use; falls back to the saved one if offline. Drops images it no longer lists. */
+    private var latest: String? = null
+
+    /** Latest manifest; falls back to the saved one if offline. Call [commit] once its images are downloaded. */
     fun manifest(): List<Image> {
         dir.mkdirs()
-        val text = runCatching { fetch() }.onSuccess(saved::writeText).getOrElse { e ->
+        val text = runCatching { fetch() }.getOrElse { e ->
             if (!saved.exists()) throw e
             log("Could not fetch the latest manifest (${e.message}); using the downloaded release")
             saved.readText()
         }
-        return parse(text).also { list ->
-            val keep = list.map { file(it).name }.toSet() + saved.name
-            dir.listFiles()?.filter { it.name !in keep }?.forEach(File::delete)
-        }
+        latest = text
+        return parse(text)
+    }
+
+    /**
+     * Saves the [manifest] release for offline use and deletes files it doesn't list.
+     * Only called after all of [list] is downloaded, so a failed update leaves the previous release usable offline.
+     */
+    fun commit(list: List<Image>) {
+        latest?.let(saved::writeText)
+        val keep = list.map { file(it).name }.toSet() + saved.name
+        dir.listFiles()?.filter { it.name !in keep }?.forEach(File::delete)
     }
 
     /** Local copy of [im], downloading and unpacking it first if needed. */
@@ -84,17 +94,24 @@ class Images(base: File, val type: Int, private val status: (String, Double) -> 
     }
 
     fun downloadAll() {
-        val list = manifest().filter { it.needed }
+        val all = manifest()
+        val list = all.filter { it.needed }
         list.forEach(::ensure)
+        commit(all)
         log("AGNOS for ${NAMES[type]} downloaded: ${list.size} images, ${gb(bytes())}")
     }
 
     /** Images of the latest release that aren't downloaded yet (0 = up to date). Doesn't change the store. */
     fun missing() = parse(fetch()).count { it.needed && !file(it).exists() }
 
+    private fun local() = runCatching { parse(saved.readText()).filter { it.needed } }.getOrNull()
+
+    /** The saved release is fully downloaded. */
+    fun complete() = local()?.all { file(it).exists() } == true
+
     /** Offline summary for the UI. */
     fun summary(): String {
-        val list = runCatching { parse(saved.readText()).filter { it.needed } }.getOrNull() ?: return "Not downloaded"
+        val list = local() ?: return "Not downloaded"
         val have = list.count { file(it).exists() }
         return if (have == list.size) "Downloaded (${gb(bytes())})" else "$have of ${list.size} images downloaded (${gb(bytes())})"
     }

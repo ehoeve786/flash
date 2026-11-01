@@ -80,7 +80,12 @@ export class ManifestImage {
  * @returns {Promise<ManifestImage[]>}
  */
 export async function getManifest(url) {
-  const images = await fetch(url).then((response) => response.json())
-  const agnos = await fetch(url.replace('all-partitions', 'agnos')).then((response) => response.json())
+  const getJson = async (u) => {
+    const response = await fetch(u)
+    if (!response.ok) throw new Error(`Fetch error: ${response.status} for ${u}`)
+    return response.json()
+  }
+  const images = await getJson(url)
+  const agnos = await getJson(url.replace('all-partitions', 'agnos'))
   return images.map((image) => new ManifestImage(agnos.find((a) => a.name === image.name) ?? image))
 }

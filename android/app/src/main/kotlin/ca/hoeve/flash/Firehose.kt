@@ -49,7 +49,8 @@ class Firehose(private val usb: Link, private val log: (String) -> Unit) {
     fun waitForData(retries: Int = 3): Reply {
         val out = ByteArrayOutputStream()
         var misses = 0
-        while ("<response" !in out.toString(Charsets.UTF_8.name())) {
+        // Wait for a complete <response .../> tag; it can be split across USB packets.
+        while (TAG.findAll(out.toString(Charsets.UTF_8.name())).none { it.groupValues[1] == "response" }) {
             val c = usb.read(1000)
             if (c.isEmpty()) {
                 if (++misses > retries) break
