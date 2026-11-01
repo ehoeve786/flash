@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity(), Session.Ui {
     private var logGen = -1
     private var logLen = 0
     private var pending: ((UsbDevice) -> Unit)? = null
+    private var attached = false
 
     private val permReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
@@ -116,9 +117,16 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         super.onStop()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        attached = intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED
+    }
+
     override fun onResume() {
         super.onResume()
-        if (!Session.running && Session.status.isEmpty()) idle()
+        // Also refresh after a finished job when a device is plugged in.
+        if (!Session.running && (Session.status.isEmpty() || attached)) idle()
+        attached = false
     }
 
     override fun onDestroy() {
@@ -197,7 +205,10 @@ class MainActivity : AppCompatActivity(), Session.Ui {
     private fun agnosDelete() {
         if (Session.running) return
         val s = store()
-        confirm("Delete the downloaded AGNOS for ${Images.NAMES[s.type]} (${Images.gb(s.bytes())})?") { s.clear(); agnosInfo() }
+        confirm("Delete the downloaded AGNOS for ${Images.NAMES[s.type]} (${Images.gb(s.bytes())})?") {
+            shown = null
+            Session.run(this) { s.clear(); Session.progress("AGNOS deleted for ${Images.NAMES[s.type]}", 1.0) }
+        }
     }
 
     private val UsbDevice.fastboot get() = vendorId == 0x18D1 && productId == 0xD00D
@@ -277,7 +288,8 @@ class MainActivity : AppCompatActivity(), Session.Ui {
         val m = model
         val app = applicationContext
         val s = store(m)
-        confirm("Erase and reflash this ${findViewById<TextView>(m.btn).text}? Everything except the persist partition is erased.") {
+        val warn = if (s.complete()) "" else "\n\nAGNOS isn't fully downloaded, so it downloads first while the device waits in EDL. Tap Download first to avoid this."
+        confirm("Erase and reflash this ${findViewById<TextView>(m.btn).text}? Everything except the persist partition is erased.$warn") {
             launch(d) {
                 val programmer = Loader.get(app.noBackupFilesDir, Session::log)
                 Flasher(Qdl(it, programmer, Session::log), s, Session::progress, Session::log).run()

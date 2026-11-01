@@ -250,7 +250,7 @@ export class FlashManager {
       } else if (deviceType == 34) {
         this.manifestUrl = config.manifests.release_mici
       } else {
-        throw new Error('Unknown device type', deviceType)
+        throw new Error(`Unknown device type ${deviceType}`)
       }
 
       try {

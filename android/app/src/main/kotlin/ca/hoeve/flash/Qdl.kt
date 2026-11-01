@@ -33,7 +33,8 @@ class Qdl(private val usb: Link, private val programmer: ByteArray, private val 
         check(p.valid) { "LUN $lun: primary GPT header invalid" }
         val b = read(lun, p.alternateLba)
         when {
-            !p.ok -> { check(b.ok) { "LUN $lun: primary and backup GPT corrupted" }; log("LUN $lun: primary GPT corrupted, using backup"); b }
+            // asAlternate() swaps current/alternate LBAs back to primary meaning, which eraseLun() relies on.
+            !p.ok -> { check(b.ok) { "LUN $lun: primary and backup GPT corrupted" }; log("LUN $lun: primary GPT corrupted, using backup"); b.asAlternate() }
             else -> { if (!b.ok || b.entriesCrc != p.entriesCrc) log("LUN $lun: backup GPT inconsistent, using primary"); p }
         }
     }

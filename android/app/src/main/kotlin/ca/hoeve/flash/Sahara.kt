@@ -43,7 +43,7 @@ class Sahara(private val usb: Link, private val programmer: ByteArray) {
     private fun exec(cmd: Int): ByteArray {
         usb.write(pack(EXECUTE_REQ, 0xC, cmd))
         val r = response()
-        check(r?.u32(0) == EXECUTE_RSP) { "Sahara - error while executing command" }
+        check(r != null && r.size >= 16 && r.u32(0) == EXECUTE_RSP) { "Sahara - error while executing command" }
         val n = r!!.u32(12)
         check(n in 1..4096) { "Sahara - bad execute response length $n" }
         usb.write(pack(EXECUTE_DATA, 0xC, cmd))
@@ -62,6 +62,7 @@ class Sahara(private val usb: Link, private val programmer: ByteArray) {
             val r = response() ?: error("Sahara - Timeout while uploading loader. Wrong loader?")
             when (r.u32(0)) {
                 READ_DATA_64 -> {
+                    check(r.size >= 32) { "Sahara - short read request" }
                     check(r.u64(8) >= 0xC) { "Sahara - Unknown sahara id" }
                     val off = r.u64(16)
                     val len = r.u64(24)
@@ -70,6 +71,7 @@ class Sahara(private val usb: Link, private val programmer: ByteArray) {
                     else usb.write(programmer.copyOfRange(minOf(off.toInt(), programmer.size), programmer.size).copyOf(len.toInt()))
                 }
                 END_TRANSFER -> {
+                    check(r.size >= 16) { "Sahara - short end of transfer" }
                     check(r.u32(12) == 0) { "Sahara - Loader transfer failed (status ${r.u32(12)})" }
                     usb.write(pack(DONE_REQ, 0x8))
                     check(response()?.u32(0) == DONE_RSP) { "Sahara - Failed to upload loader" }
